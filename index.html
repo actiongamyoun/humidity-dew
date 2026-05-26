@@ -832,45 +832,62 @@ async function fetchWeather(lat, lon){
 }
 async function reverseGeocode(lat, lon){
   // 한국 행정구역: 시/도 + 시/군/구 단위까지 추출
-  // 우선순위: BigDataCloud (administrative 배열이 한국 행정구역에 강함) → Open-Meteo 폴백
+  // 3개 API 순차 시도 (네트워크/CORS 환경에 따라 하나라도 성공하면 OK)
 
-  // 1) BigDataCloud
+  // ─── 1) Nominatim (OpenStreetMap) ─── 한국 행정구역 데이터 가장 충실
+  try{
+    const r = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&accept-language=ko&zoom=10`,
+      { headers: { 'Accept': 'application/json' } }
+    );
+    if(r.ok){
+      const j = await r.json();
+      const a = j.address || {};
+      // 한국 응답 예시: { state: '울산광역시', city: '동구', borough/county/... }
+      const sido = a.state || a.province || a.region;
+      const sigungu = a.city || a.county || a.borough || a.town || a.municipality;
+      const parts = [sido, sigungu].filter(Boolean);
+      const uniq = [...new Set(parts)];
+      if(uniq.length){
+        console.log('[geocoding] Nominatim 성공:', uniq.join(' '));
+        return uniq.join(' ');
+      }
+    } else {
+      console.warn('[geocoding] Nominatim HTTP', r.status);
+    }
+  }catch(e){
+    console.warn('[geocoding] Nominatim 실패:', e.message);
+  }
+
+  // ─── 2) BigDataCloud ─── localityInfo.administrative 배열 파싱
   try{
     const r = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=ko`);
     if(r.ok){
       const j = await r.json();
-      // localityInfo.administrative: 가장 큰 단위부터 [국가, 시/도, 시/군/구, 읍/면/동...] 순
-      // adminLevel 기준: 2(국가), 4(시·도), 6(시), 7(구), 8(읍·면·동) 등 OSM 기준
       const admins = (j.localityInfo && j.localityInfo.administrative) || [];
-      // 한국 기준: '특별시/광역시/도'와 '구/시/군' 둘 다 찾기
-      let sido = null;   // 시/도
-      let sigungu = null; // 시/군/구
-
-      for(const a of admins){
-        const name = (a.name || '').trim();
+      let sido = null, sigungu = null;
+      for(const ad of admins){
+        const name = (ad.name || '').trim();
         if(!name) continue;
-        // 시/도 후보
-        if(!sido && /(특별시|광역시|특별자치시|특별자치도|도)$/.test(name)){
-          sido = name;
-        }
-        // 시/군/구 후보
-        else if(!sigungu && /(시|군|구)$/.test(name)){
-          // sido에 이미 잡힌 이름과 중복 방지
-          if(name !== sido) sigungu = name;
-        }
+        if(!sido && /(특별시|광역시|특별자치시|특별자치도|도)$/.test(name)) sido = name;
+        else if(!sigungu && /(시|군|구)$/.test(name) && name !== sido) sigungu = name;
       }
-      // 폴백 처리
       if(!sido) sido = j.principalSubdivision || null;
       if(!sigungu) sigungu = j.city || j.locality || null;
-
       const parts = [sido, sigungu].filter(Boolean);
-      // 중복 제거 (예: 세종특별자치시 == city도 세종)
       const uniq = [...new Set(parts)];
-      if(uniq.length) return uniq.join(' ');
+      if(uniq.length){
+        console.log('[geocoding] BigDataCloud 성공:', uniq.join(' '));
+        return uniq.join(' ');
+      }
+    } else {
+      console.warn('[geocoding] BigDataCloud HTTP', r.status);
     }
-  }catch(e){}
+  }catch(e){
+    console.warn('[geocoding] BigDataCloud 실패:', e.message);
+  }
 
-  // 2) Open-Meteo 폴백
+  // ─── 3) Open-Meteo geocoding ─── 최후 폴백
   try{
     const r = await fetch(`https://geocoding-api.open-meteo.com/v1/reverse?latitude=${lat}&longitude=${lon}&language=ko&count=1`);
     if(r.ok){
@@ -879,12 +896,23 @@ async function reverseGeocode(lat, lon){
         const x = j.results[0];
         const parts = [x.admin1, x.admin2].filter(Boolean);
         const uniq = [...new Set(parts)];
-        if(uniq.length) return uniq.join(' ');
-        if(x.name) return x.name;
+        if(uniq.length){
+          console.log('[geocoding] Open-Meteo 성공:', uniq.join(' '));
+          return uniq.join(' ');
+        }
+        if(x.name){
+          console.log('[geocoding] Open-Meteo (name):', x.name);
+          return x.name;
+        }
       }
+    } else {
+      console.warn('[geocoding] Open-Meteo HTTP', r.status);
     }
-  }catch(e){}
+  }catch(e){
+    console.warn('[geocoding] Open-Meteo 실패:', e.message);
+  }
 
+  console.error('[geocoding] 모든 API 실패');
   return null;
 }
 async function loadCurrent(){
