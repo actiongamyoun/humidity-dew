@@ -889,18 +889,45 @@ async function reverseGeocode(lat, lon){
 }
 async function loadCurrent(){
   const btn = document.getElementById('refreshBtn');
+  const locEl = document.getElementById('loc');
   btn.classList.add('spinning');
-  document.getElementById('loc').textContent = '위치 확인 중…';
+  locEl.textContent = '위치 확인 중…';
   try{
     if(!navigator.geolocation) throw new Error('GPS 미지원');
-    const pos = await new Promise((res, rej) => {
-      navigator.geolocation.getCurrentPosition(res, rej, {timeout:10000, enableHighAccuracy:false});
-    });
+
+    // 1) GPS 좌표 받기
+    let pos;
+    try{
+      pos = await new Promise((res, rej) => {
+        navigator.geolocation.getCurrentPosition(res, rej, {timeout:10000, enableHighAccuracy:false, maximumAge:300000});
+      });
+    }catch(geoErr){
+      // GPS 권한 거부/실패 → 사유 표시
+      const reason = geoErr.code === 1 ? '권한 거부' :
+                     geoErr.code === 2 ? '위치 불가' :
+                     geoErr.code === 3 ? '시간 초과' : 'GPS 오류';
+      locEl.textContent = `위치 실패: ${reason}`;
+      console.error('Geolocation error:', geoErr);
+      btn.classList.remove('spinning');
+      return;
+    }
+
     const {latitude:lat, longitude:lon} = pos.coords;
-    const [data, locName] = await Promise.all([
-      fetchWeather(lat, lon),
-      reverseGeocode(lat, lon)
-    ]);
+
+    // 2) 날씨 + 지명 동시 호출 (지명 실패해도 날씨는 받음)
+    let data, locName;
+    try{
+      [data, locName] = await Promise.all([
+        fetchWeather(lat, lon),
+        reverseGeocode(lat, lon)
+      ]);
+    }catch(apiErr){
+      console.error('API error:', apiErr);
+      locEl.textContent = `${lat.toFixed(3)}, ${lon.toFixed(3)} (API 오류)`;
+      btn.classList.remove('spinning');
+      return;
+    }
+
     const c = data.current;
     if(c.surface_pressure != null) state.pressure = c.surface_pressure;
     state.current = {
@@ -908,7 +935,8 @@ async function loadCurrent(){
       apparent: c.apparent_temperature, code: c.weather_code,
       wind: c.wind_speed_10m, pressure: c.surface_pressure
     };
-    document.getElementById('loc').textContent = locName || '위치 확인 불가';
+    // 지명이 없으면 좌표라도 표시 (정보 0보다 낫다)
+    locEl.textContent = locName || `${lat.toFixed(3)}°N, ${lon.toFixed(3)}°E`;
     document.getElementById('temp').textContent = c.temperature_2m.toFixed(1);
     document.getElementById('feel').textContent = c.apparent_temperature.toFixed(1);
     const [icon, desc] = weatherIcons[c.weather_code] || ['cloud','—'];
@@ -918,7 +946,7 @@ async function loadCurrent(){
     document.getElementById('mWind').textContent = c.wind_speed_10m.toFixed(0);
     render();
   }catch(e){
-    document.getElementById('loc').textContent = '위치를 가져올 수 없어요';
+    locEl.textContent = `오류: ${e.message || '알 수 없음'}`;
     console.error(e);
   }finally{
     btn.classList.remove('spinning');
