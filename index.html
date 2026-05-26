@@ -862,7 +862,12 @@ async function reverseGeocode(lat, lon){
   // 3개 API 순차 시도 (네트워크/CORS 환경에 따라 하나라도 성공하면 OK)
 
   // ─── 1) Nominatim (OpenStreetMap) ─── 한국 행정구역 데이터 가장 충실
-  // zoom=12: 시/군/구 단위까지 (10은 광역시만, 14는 동까지)
+  // zoom=12: 시/군/구 단위까지
+  // 한국 응답 패턴:
+  //   광역시: { city: '부산광역시', borough: '해운대구', suburb: '좌4동' }
+  //   일반시: { state: '경기도', city: '성남시', borough: '분당구' } 또는
+  //            { state: '경기도', city: '수원시', city_district: '영통구' }
+  //   특별시: { city: '서울특별시', borough: '강남구' }
   try{
     const r = await fetch(
       `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&accept-language=ko&zoom=12&addressdetails=1`,
@@ -871,13 +876,14 @@ async function reverseGeocode(lat, lon){
     if(r.ok){
       const j = await r.json();
       const a = j.address || {};
-      // 한국 응답 예시:
-      //   { state: '부산광역시', city: '해운대구', ... } 또는
-      //   { state: '경기도', city: '성남시', borough: '분당구', ... }
-      const sido = a.state || a.province || a.region;
-      // city/borough/county 중 시·군·구로 보이는 첫 번째
-      const sigunguCandidates = [a.city, a.borough, a.county, a.town, a.municipality, a.city_district, a.suburb].filter(Boolean);
-      const sigungu = sigunguCandidates.find(n => /(시|군|구)$/.test(n)) || sigunguCandidates[0];
+      // 시/도 후보 (특별시·광역시·도)
+      const sidoCandidates = [a.state, a.province, a.region, a.city].filter(Boolean);
+      const sido = sidoCandidates.find(n => /(특별시|광역시|특별자치시|특별자치도|도)$/.test(n))
+                || sidoCandidates[0];
+      // 시/군/구 후보 (borough가 구 단위, city가 일반시)
+      const sigunguCandidates = [a.borough, a.city_district, a.county, a.city, a.town, a.municipality, a.district].filter(Boolean);
+      const sigungu = sigunguCandidates.find(n => /(시|군|구)$/.test(n) && n !== sido)
+                   || sigunguCandidates.find(n => n !== sido);
       const parts = [sido, sigungu].filter(Boolean);
       const uniq = [...new Set(parts)];
       if(uniq.length){
