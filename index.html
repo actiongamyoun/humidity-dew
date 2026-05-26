@@ -176,17 +176,17 @@ tailwind.config = {
 <main class="w-full max-w-md px-container-padding pt-[72px] pb-8 flex flex-col gap-stack-gap">
 
   <!-- 1. 현재 날씨 -->
-  <section class="glass-card rounded-2xl p-3 shadow-[0_4px_16px_rgba(0,122,255,0.05)]">
+  <section class="glass-card rounded-2xl p-4 shadow-[0_4px_16px_rgba(0,122,255,0.05)]">
     <div class="flex items-center gap-3">
-      <span id="wIcon" class="material-symbols-outlined text-[32px] text-primary flex-shrink-0">cloud</span>
+      <span id="wIcon" class="material-symbols-outlined text-[44px] text-primary flex-shrink-0">cloud</span>
       <div class="flex-1 min-w-0">
         <div class="flex items-baseline gap-2 flex-wrap">
-          <span id="temp" class="text-[20px] font-bold leading-none">--</span>
-          <span class="text-primary text-[12px] font-semibold">°C</span>
-          <span id="loc" class="text-[11px] text-outline truncate">위치 확인 중…</span>
+          <span id="temp" class="text-[28px] font-bold leading-none">--</span>
+          <span class="text-primary text-[15px] font-semibold">°C</span>
+          <span id="loc" class="text-[13px] text-on-surface-variant font-semibold truncate">위치 확인 중…</span>
         </div>
-        <div class="flex gap-2 text-[10px] text-outline mt-1 flex-wrap">
-          <span id="wDesc">—</span>
+        <div class="flex gap-2 text-[12px] text-outline mt-1.5 flex-wrap">
+          <span id="wDesc" class="font-medium">—</span>
           <span>·</span>
           <span>체감 <b class="text-on-surface-variant font-semibold" id="feel">--</b>°</span>
           <span>·</span>
@@ -195,9 +195,9 @@ tailwind.config = {
           <span>풍속 <b class="text-on-surface-variant font-semibold" id="mWind">--</b>km/h</span>
         </div>
       </div>
-      <button id="refreshBtn" class="material-symbols-outlined text-outline hover:text-primary p-1 text-[20px]">refresh</button>
+      <button id="refreshBtn" class="material-symbols-outlined text-outline hover:text-primary p-1 text-[22px]">refresh</button>
     </div>
-    <div class="flex justify-between mt-2 px-1 text-[10px] text-outline border-t border-outline-variant/30 pt-2">
+    <div class="flex justify-between mt-3 px-1 text-[11px] text-outline border-t border-outline-variant/30 pt-2.5">
       <span id="date">—</span>
       <span id="clock">--:--:--</span>
     </div>
