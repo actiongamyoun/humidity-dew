@@ -1,0 +1,939 @@
+<!DOCTYPE html>
+<html class="light" lang="ko">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no"/>
+<meta name="theme-color" content="#E3F2FD"/>
+<title>Atmosphere Monitor</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<script>
+tailwind.config = {
+  darkMode: "class",
+  theme: {
+    extend: {
+      colors: {
+        "surface-container-high":"#e8e8ed","error-container":"#ffdad6","on-primary-fixed-variant":"#004493",
+        "primary-fixed":"#d8e2ff","inverse-surface":"#2e3034","on-primary-container":"#fefcff",
+        "inverse-primary":"#adc6ff","secondary-fixed-dim":"#53e16f","on-background":"#1a1c1f",
+        "on-primary-fixed":"#001a41","on-tertiary":"#ffffff","outline":"#717786",
+        "surface-container-highest":"#e2e2e7","on-tertiary-fixed":"#0c006a","on-error-container":"#93000a",
+        "on-tertiary-container":"#fffbff","tertiary-fixed-dim":"#c2c1ff","primary-container":"#0070eb",
+        "on-secondary-fixed":"#002107","tertiary":"#4c4aca","surface":"#f9f9fe",
+        "surface-container":"#ededf2","tertiary-fixed":"#e2dfff","secondary":"#006e28",
+        "surface-bright":"#f9f9fe","on-secondary-container":"#00732a","outline-variant":"#c1c6d7",
+        "secondary-container":"#6ffb85","on-primary":"#ffffff","background":"#f9f9fe",
+        "on-tertiary-fixed-variant":"#3631b4","surface-variant":"#e2e2e7","secondary-fixed":"#72fe88",
+        "surface-tint":"#005bc1","inverse-on-surface":"#f0f0f5","surface-container-low":"#f3f3f8",
+        "surface-container-lowest":"#ffffff","error":"#ba1a1a","on-secondary":"#ffffff",
+        "on-surface":"#1a1c1f","on-surface-variant":"#414755","on-error":"#ffffff",
+        "surface-dim":"#d9dade","primary-fixed-dim":"#adc6ff","tertiary-container":"#6664e4",
+        "primary":"#0058bc","on-secondary-fixed-variant":"#00531c"
+      },
+      spacing: { "container-padding":"20px","stack-gap":"16px","card-padding":"24px","grid-gutter":"12px" }
+    }
+  }
+}
+</script>
+<style>
+  body { font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif; min-height:100dvh; }
+  .glass-card {
+    background: rgba(255,255,255,0.7);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255,255,255,0.3);
+  }
+  .sky-gradient { background: linear-gradient(180deg,#E3F2FD 0%,#F9F9FE 100%); }
+  .material-symbols-outlined { font-variation-settings:'FILL' 0,'wght' 300,'GRAD' 0,'opsz' 24; }
+  .glow-mint  { box-shadow: 0 0 12px rgba(83,225,111,.35); }
+  .glow-indigo{ box-shadow: 0 0 12px rgba(102,100,228,.35); }
+
+  /* HERO 숫자 - 자동 축소 */
+  .hero-num-wrap { display: flex; align-items: baseline; width: 100%; overflow: hidden; }
+  .hero-num {
+    font-weight: 800; letter-spacing: -2px; line-height: 1;
+    font-size: clamp(32px, 13vw, 56px);
+    white-space: nowrap;
+  }
+  .hero-unit { font-weight: 800; font-size: clamp(14px, 4vw, 20px); margin-left: 4px; flex-shrink: 0; }
+
+  /* 입력 타입 토글 */
+  .input-tabs { display: inline-flex; background: rgba(0,0,0,.04); border-radius: 999px; padding: 3px; gap: 2px; }
+  .input-tab {
+    padding: 6px 12px; border-radius: 999px;
+    font-size: 11px; font-weight: 600; color: #717786;
+    cursor: pointer; transition: all .2s;
+    display: flex; align-items: center; gap: 4px;
+    border: none; background: transparent;
+  }
+  .input-tab .material-symbols-outlined { font-size: 14px; }
+  .input-tab.active { background: #fff; color: #0058bc; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+
+  /* Dial */
+  .gauge-wrap { touch-action: none; cursor: grab; user-select: none; }
+  .gauge-wrap:active { cursor: grabbing; }
+  .gauge-knob { filter: drop-shadow(0 2px 4px rgba(0,0,0,.18)); }
+
+  /* Vertical thermometer */
+  .vsl-wrap { touch-action: none; cursor: grab; user-select: none; position: relative; }
+  .vsl-wrap:active { cursor: grabbing; }
+
+  /* ===== iOS Wheel Picker (정수부 + 소수부) ===== */
+  .wheel-group {
+    display: flex; align-items: center; justify-content: center;
+    gap: 4px;
+    position: relative;
+    height: 160px;
+  }
+  .wheel {
+    position: relative;
+    width: 64px; height: 160px;
+    overflow: hidden;
+    touch-action: none;
+    cursor: grab;
+    user-select: none;
+    /* 위/아래 페이드 */
+    mask-image: linear-gradient(
+      to bottom,
+      transparent 0%,
+      rgba(0,0,0,0.2) 12%,
+      rgba(0,0,0,1) 40%,
+      rgba(0,0,0,1) 60%,
+      rgba(0,0,0,0.2) 88%,
+      transparent 100%
+    );
+    -webkit-mask-image: linear-gradient(
+      to bottom,
+      transparent 0%,
+      rgba(0,0,0,0.2) 12%,
+      rgba(0,0,0,1) 40%,
+      rgba(0,0,0,1) 60%,
+      rgba(0,0,0,0.2) 88%,
+      transparent 100%
+    );
+  }
+  .wheel:active { cursor: grabbing; }
+  .wheel-narrow { width: 44px; }
+  .wheel-list {
+    position: absolute;
+    left: 0; right: 0; top: 0;
+    will-change: transform;
+    transition: transform .15s cubic-bezier(0.22, 0.61, 0.36, 1);
+  }
+  .wheel-list.no-anim { transition: none; }
+  .wheel-item {
+    height: 40px; /* itemHeight와 일치 */
+    display: flex; align-items: center; justify-content: center;
+    font-size: 28px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: #717786;
+    letter-spacing: -1px;
+  }
+  /* 선택된 행 가운데 강조선 */
+  .wheel-center {
+    position: absolute;
+    left: -4px; right: -4px;
+    top: 60px; height: 40px;
+    pointer-events: none;
+    border-top: 1.5px solid rgba(0,0,0,.08);
+    border-bottom: 1.5px solid rgba(0,0,0,.08);
+    background: rgba(255,255,255,0.4);
+  }
+  .wheel-dot {
+    font-size: 28px; font-weight: 800; color: #1a1c1f;
+    padding-bottom: 8px;
+  }
+  .wheel-group.dry .wheel-list[data-active] .wheel-item.selected { color: #ba1a1a; }
+  .wheel-group.wet .wheel-list[data-active] .wheel-item.selected { color: #0058bc; }
+
+  .toast {
+    position: fixed; left: 50%; bottom: 32px;
+    transform: translateX(-50%) translateY(20px);
+    background:#1a1c1f; color:#fff; padding:10px 18px; border-radius:999px;
+    font-size:13px; font-weight:600; opacity:0; pointer-events:none;
+    transition: all .25s; z-index:99;
+  }
+  .toast.show { opacity:1; transform: translateX(-50%) translateY(0); }
+  .spinning { animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body class="bg-background text-on-background min-h-screen sky-gradient flex flex-col items-center">
+
+<!-- TopAppBar -->
+<header class="flex justify-between items-center px-container-padding h-[64px] w-full fixed top-0 z-50 bg-surface/80 backdrop-blur-md">
+  <div class="flex items-center gap-2">
+    <span class="material-symbols-outlined text-primary text-[24px]">cloud</span>
+    <h1 class="text-[18px] font-semibold text-primary tracking-tight">Atmosphere Monitor</h1>
+  </div>
+  <button id="shareBtn" class="material-symbols-outlined text-primary hover:bg-primary-container/20 p-2 rounded-full active:scale-95 duration-150">share</button>
+</header>
+
+<main class="w-full max-w-md px-container-padding pt-[72px] pb-8 flex flex-col gap-stack-gap">
+
+  <!-- 1. 현재 날씨 -->
+  <section class="glass-card rounded-2xl p-3 shadow-[0_4px_16px_rgba(0,122,255,0.05)]">
+    <div class="flex items-center gap-3">
+      <span id="wIcon" class="material-symbols-outlined text-[32px] text-primary flex-shrink-0">cloud</span>
+      <div class="flex-1 min-w-0">
+        <div class="flex items-baseline gap-2 flex-wrap">
+          <span id="temp" class="text-[20px] font-bold leading-none">--</span>
+          <span class="text-primary text-[12px] font-semibold">°C</span>
+          <span id="loc" class="text-[11px] text-outline truncate">위치 확인 중…</span>
+        </div>
+        <div class="flex gap-2 text-[10px] text-outline mt-1 flex-wrap">
+          <span id="wDesc">—</span>
+          <span>·</span>
+          <span>체감 <b class="text-on-surface-variant font-semibold" id="feel">--</b>°</span>
+          <span>·</span>
+          <span>습도 <b class="text-on-surface-variant font-semibold" id="mHum">--%</b></span>
+          <span>·</span>
+          <span>풍속 <b class="text-on-surface-variant font-semibold" id="mWind">--</b>km/h</span>
+        </div>
+      </div>
+      <button id="refreshBtn" class="material-symbols-outlined text-outline hover:text-primary p-1 text-[20px]">refresh</button>
+    </div>
+    <div class="flex justify-between mt-2 px-1 text-[10px] text-outline border-t border-outline-variant/30 pt-2">
+      <span id="date">—</span>
+      <span id="clock">--:--:--</span>
+    </div>
+  </section>
+
+  <!-- 2. 메인 -->
+  <div class="grid grid-cols-2 gap-grid-gutter">
+    <div class="glass-card rounded-[28px] p-4 shadow-[0_10px_30px_rgba(0,122,255,0.08)] flex flex-col min-w-0">
+      <div class="flex items-center gap-1 text-secondary mb-3">
+        <span class="material-symbols-outlined text-[20px]">humidity_high</span>
+        <span class="text-[12px] font-bold">상대습도</span>
+      </div>
+      <div class="hero-num-wrap">
+        <span id="rhVal" class="hero-num text-secondary">--</span>
+        <span class="hero-unit text-secondary">%</span>
+      </div>
+      <div id="rhBadge" class="inline-flex self-start px-2.5 py-1 bg-secondary-container/30 text-on-secondary-container rounded-full text-[11px] font-bold mt-3 mb-4">—</div>
+      <div class="w-full mt-auto">
+        <div class="h-2 w-full bg-surface-container rounded-full overflow-hidden">
+          <div id="rhBar" class="h-full bg-secondary-fixed-dim glow-mint transition-all duration-500" style="width:0%"></div>
+        </div>
+        <div class="flex justify-between mt-2 text-[9px] text-outline"><span>0%</span><span>50%</span><span>100%</span></div>
+      </div>
+    </div>
+    <div class="glass-card rounded-[28px] p-4 shadow-[0_10px_30px_rgba(0,122,255,0.08)] flex flex-col min-w-0 border-t-2 border-tertiary-container/10">
+      <div class="flex items-center gap-1 text-tertiary mb-3">
+        <span class="material-symbols-outlined text-[20px]">water_drop</span>
+        <span class="text-[12px] font-bold">이슬점</span>
+      </div>
+      <div class="hero-num-wrap">
+        <span id="dpVal" class="hero-num text-tertiary">--</span>
+        <span class="hero-unit text-tertiary">°C</span>
+      </div>
+      <div id="dpBadge" class="inline-flex self-start px-2.5 py-1 bg-tertiary-container/20 text-on-tertiary-fixed-variant rounded-full text-[11px] font-bold mt-3 mb-4">—</div>
+      <div class="w-full mt-auto">
+        <div class="h-2 w-full bg-surface-container rounded-full overflow-hidden">
+          <div id="dpBar" class="h-full bg-tertiary-container glow-indigo transition-all duration-500" style="width:0%"></div>
+        </div>
+        <div class="flex justify-between mt-2 text-[9px] text-outline"><span>-20°C</span><span>10°C</span><span>40°C</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. 입력 -->
+  <section class="glass-card rounded-[32px] p-card-padding shadow-[0_10px_30px_rgba(0,122,255,0.08)]">
+    <div class="flex items-center justify-between mb-5 flex-wrap gap-2">
+      <h3 class="text-[13px] text-on-surface-variant font-semibold">온도 입력</h3>
+      <div class="input-tabs" role="tablist">
+        <button class="input-tab active" data-mode="dial" role="tab"><span class="material-symbols-outlined">speed</span>다이얼</button>
+        <button class="input-tab" data-mode="thermo" role="tab"><span class="material-symbols-outlined">device_thermostat</span>온도계</button>
+        <button class="input-tab" data-mode="wheel" role="tab"><span class="material-symbols-outlined">view_carousel</span>휠</button>
+      </div>
+    </div>
+
+    <!-- A) 다이얼 -->
+    <div id="modeDial" class="input-pane">
+      <div class="grid grid-cols-2 gap-4">
+        <div class="flex flex-col items-center">
+          <span class="text-[12px] text-on-surface-variant mb-3 font-semibold">건구온도</span>
+          <div class="gauge-wrap relative flex items-center justify-center w-32 h-32" id="dryGauge">
+            <svg class="w-full h-full" viewBox="0 0 144 144">
+              <g transform="rotate(135 72 72)">
+                <circle cx="72" cy="72" r="58" fill="transparent" stroke="#ededf2" stroke-width="10" stroke-linecap="round" stroke-dasharray="273.32 364.42"/>
+                <circle id="dryFill" cx="72" cy="72" r="58" fill="transparent" stroke="#ba1a1a" stroke-width="10" stroke-linecap="round" stroke-dasharray="0 364.42" style="filter:drop-shadow(0 0 6px rgba(186,26,26,.3))"/>
+              </g>
+              <circle id="dryKnob" class="gauge-knob" cx="72" cy="72" r="8" fill="#fff" stroke="#ba1a1a" stroke-width="3"/>
+            </svg>
+            <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+              <span id="dryValDial" class="font-bold text-[20px]">25.0</span>
+              <span class="text-error font-semibold text-[10px]">°C</span>
+            </div>
+            <div class="absolute -bottom-1 text-[9px] text-outline flex justify-between w-[80%] pointer-events-none"><span>-20</span><span>60</span></div>
+          </div>
+        </div>
+        <div class="flex flex-col items-center">
+          <span class="text-[12px] text-on-surface-variant mb-3 font-semibold">습구온도</span>
+          <div class="gauge-wrap relative flex items-center justify-center w-32 h-32" id="wetGauge">
+            <svg class="w-full h-full" viewBox="0 0 144 144">
+              <g transform="rotate(135 72 72)">
+                <circle cx="72" cy="72" r="58" fill="transparent" stroke="#ededf2" stroke-width="10" stroke-linecap="round" stroke-dasharray="273.32 364.42"/>
+                <circle id="wetFill" cx="72" cy="72" r="58" fill="transparent" stroke="#0070eb" stroke-width="10" stroke-linecap="round" stroke-dasharray="0 364.42" style="filter:drop-shadow(0 0 6px rgba(0,112,235,.3))"/>
+              </g>
+              <circle id="wetKnob" class="gauge-knob" cx="72" cy="72" r="8" fill="#fff" stroke="#0070eb" stroke-width="3"/>
+            </svg>
+            <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+              <span id="wetValDial" class="font-bold text-[20px]">20.0</span>
+              <span class="text-primary font-semibold text-[10px]">°C</span>
+            </div>
+            <div class="absolute -bottom-1 text-[9px] text-outline flex justify-between w-[80%] pointer-events-none"><span>-20</span><span>60</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- B) 세로 온도계 -->
+    <div id="modeThermo" class="input-pane hidden">
+      <div class="grid grid-cols-2 gap-4">
+        <div class="flex flex-col items-center">
+          <span class="text-[12px] text-on-surface-variant mb-3 font-semibold">건구온도</span>
+          <div class="flex items-center gap-3">
+            <div class="flex flex-col items-end text-[9px] text-outline font-semibold gap-0 py-2" style="height:180px;justify-content:space-between;">
+              <span>60</span><span>40</span><span>20</span><span>0</span><span>-20</span>
+            </div>
+            <div class="vsl-wrap" id="dryThermo">
+              <svg width="44" height="200" viewBox="0 0 44 200">
+                <rect x="14" y="6" width="16" height="170" rx="8" fill="#fff" stroke="#dde5f0" stroke-width="1.5"/>
+                <rect x="17" y="9" width="10" height="164" rx="5" fill="#f3f3f8"/>
+                <rect id="dryThermoFill" x="17" y="173" width="10" height="0" rx="5" fill="url(#dryGrad)"/>
+                <circle cx="22" cy="185" r="14" fill="#ba1a1a" stroke="#fff" stroke-width="2"/>
+                <circle cx="22" cy="185" r="11" fill="url(#dryBulb)"/>
+                <defs>
+                  <linearGradient id="dryGrad" x1="0" y1="1" x2="0" y2="0"><stop offset="0%" stop-color="#ba1a1a"/><stop offset="100%" stop-color="#f08366"/></linearGradient>
+                  <radialGradient id="dryBulb" cx="40%" cy="40%" r="60%"><stop offset="0%" stop-color="#ef6651"/><stop offset="100%" stop-color="#ba1a1a"/></radialGradient>
+                </defs>
+              </svg>
+            </div>
+          </div>
+          <div class="mt-2 text-center">
+            <span id="dryValThermo" class="font-bold text-[20px]">25.0</span>
+            <span class="text-error font-semibold text-[10px]">°C</span>
+          </div>
+        </div>
+        <div class="flex flex-col items-center">
+          <span class="text-[12px] text-on-surface-variant mb-3 font-semibold">습구온도</span>
+          <div class="flex items-center gap-3">
+            <div class="flex flex-col items-end text-[9px] text-outline font-semibold gap-0 py-2" style="height:180px;justify-content:space-between;">
+              <span>60</span><span>40</span><span>20</span><span>0</span><span>-20</span>
+            </div>
+            <div class="vsl-wrap" id="wetThermo">
+              <svg width="44" height="200" viewBox="0 0 44 200">
+                <rect x="14" y="6" width="16" height="170" rx="8" fill="#fff" stroke="#dde5f0" stroke-width="1.5"/>
+                <rect x="17" y="9" width="10" height="164" rx="5" fill="#f3f3f8"/>
+                <rect id="wetThermoFill" x="17" y="173" width="10" height="0" rx="5" fill="url(#wetGrad)"/>
+                <circle cx="22" cy="185" r="14" fill="#0070eb" stroke="#fff" stroke-width="2"/>
+                <circle cx="22" cy="185" r="11" fill="url(#wetBulb)"/>
+                <defs>
+                  <linearGradient id="wetGrad" x1="0" y1="1" x2="0" y2="0"><stop offset="0%" stop-color="#0070eb"/><stop offset="100%" stop-color="#5a9bf2"/></linearGradient>
+                  <radialGradient id="wetBulb" cx="40%" cy="40%" r="60%"><stop offset="0%" stop-color="#5a9bf2"/><stop offset="100%" stop-color="#0070eb"/></radialGradient>
+                </defs>
+              </svg>
+            </div>
+          </div>
+          <div class="mt-2 text-center">
+            <span id="wetValThermo" class="font-bold text-[20px]">20.0</span>
+            <span class="text-primary font-semibold text-[10px]">°C</span>
+          </div>
+        </div>
+      </div>
+      <p class="text-center text-[10px] text-outline mt-3">유리관을 위아래로 드래그</p>
+    </div>
+
+    <!-- C) 휠 피커 (정수부 + 소수부) -->
+    <div id="modeWheel" class="input-pane hidden">
+      <div class="grid grid-cols-2 gap-4">
+        <!-- Dry -->
+        <div class="flex flex-col items-center">
+          <span class="text-[12px] text-on-surface-variant mb-3 font-semibold">건구온도</span>
+          <div class="wheel-group dry">
+            <div class="wheel" id="dryWheelInt" data-which="dry" data-part="int">
+              <div class="wheel-list" id="dryWheelIntList"></div>
+            </div>
+            <span class="wheel-dot">.</span>
+            <div class="wheel wheel-narrow" id="dryWheelDec" data-which="dry" data-part="dec">
+              <div class="wheel-list" id="dryWheelDecList"></div>
+            </div>
+            <div class="wheel-center"></div>
+          </div>
+          <div class="text-[11px] text-error font-bold mt-2">°C</div>
+        </div>
+        <!-- Wet -->
+        <div class="flex flex-col items-center">
+          <span class="text-[12px] text-on-surface-variant mb-3 font-semibold">습구온도</span>
+          <div class="wheel-group wet">
+            <div class="wheel" id="wetWheelInt" data-which="wet" data-part="int">
+              <div class="wheel-list" id="wetWheelIntList"></div>
+            </div>
+            <span class="wheel-dot">.</span>
+            <div class="wheel wheel-narrow" id="wetWheelDec" data-which="wet" data-part="dec">
+              <div class="wheel-list" id="wetWheelDecList"></div>
+            </div>
+            <div class="wheel-center"></div>
+          </div>
+          <div class="text-[11px] text-primary font-bold mt-2">°C</div>
+        </div>
+      </div>
+      <p class="text-center text-[10px] text-outline mt-3">숫자를 위아래로 굴려서 조정</p>
+    </div>
+
+    <!-- 액션 -->
+    <div class="flex justify-center gap-2 mt-6">
+      <button id="useCurrentBtn" class="flex items-center gap-1 px-3 py-2 rounded-full bg-primary-container/15 hover:bg-primary-container/30 text-primary active:scale-95">
+        <span class="material-symbols-outlined text-[16px]">my_location</span><span class="text-[12px] font-semibold">현재값</span>
+      </button>
+      <button id="resetBtn" class="flex items-center gap-1 px-3 py-2 rounded-full bg-surface-container hover:bg-surface-container-high text-on-surface-variant active:scale-95">
+        <span class="material-symbols-outlined text-[16px]">refresh</span><span class="text-[12px] font-semibold">초기화</span>
+      </button>
+      <button id="copyBtn" class="flex items-center gap-1 px-3 py-2 rounded-full bg-surface-container hover:bg-surface-container-high text-on-surface-variant active:scale-95">
+        <span class="material-symbols-outlined text-[16px]">content_copy</span><span class="text-[12px] font-semibold">복사</span>
+      </button>
+    </div>
+  </section>
+
+  <p class="text-center text-[10px] text-outline">
+    데이터: <a href="https://open-meteo.com" target="_blank" rel="noopener" class="text-primary">Open-Meteo</a> · Sprung + Magnus
+  </p>
+
+  <div class="fixed top-1/4 -right-20 w-64 h-64 bg-primary/5 rounded-full blur-[80px] -z-10"></div>
+  <div class="fixed bottom-1/4 -left-20 w-80 h-80 bg-secondary/5 rounded-full blur-[100px] -z-10"></div>
+</main>
+
+<div id="toast" class="toast">복사됨</div>
+
+<script>
+/* ============================================================
+   상태
+============================================================ */
+const state = {
+  dryT: 25.0, wetT: 20.0,
+  range: { min: -20, max: 60 },
+  current: null, pressure: 1013.25,
+  inputMode: 'dial'
+};
+
+/* 시계 */
+function pad(n){ return String(n).padStart(2,'0'); }
+function tickClock(){
+  const d = new Date();
+  document.getElementById('date').textContent =
+    `${d.getFullYear()}.${pad(d.getMonth()+1)}.${pad(d.getDate())} (${'일월화수목금토'[d.getDay()]})`;
+  document.getElementById('clock').textContent =
+    `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+setInterval(tickClock, 1000); tickClock();
+
+/* 계산 (Sprung + Magnus) */
+const MAGNUS_A = 17.625, MAGNUS_B = 243.04, PSY_A = 0.000662;
+function eSat(t){ return 6.1078 * Math.exp(MAGNUS_A * t / (MAGNUS_B + t)); }
+function calc(dry, wet){
+  if(wet > dry) wet = dry;
+  const eSatDry = eSat(dry), eSatWet = eSat(wet);
+  const e = eSatWet - PSY_A * state.pressure * (dry - wet);
+  const rh = Math.max(0, Math.min(100, (e / eSatDry) * 100));
+  const eClamped = Math.max(0.001, e);
+  const alpha = Math.log(eClamped / 6.1078);
+  const dp = (MAGNUS_B * alpha) / (MAGNUS_A - alpha);
+  return { rh, dp };
+}
+function rhBadge(rh){
+  if(rh < 30) return '매우 건조';
+  if(rh < 50) return '건조';
+  if(rh < 70) return '적정';
+  if(rh < 85) return '습함';
+  return '매우 습함';
+}
+function dpBadge(dp){
+  if(dp < 0)  return '건조';
+  if(dp < 13) return '쾌적';
+  if(dp < 18) return '다소 습함';
+  if(dp < 24) return '습함';
+  return '매우 습함';
+}
+
+function valueToPct(v){ return (v - state.range.min) / (state.range.max - state.range.min); }
+
+/* ============================================================
+   휠 피커 구현
+   - 정수 휠: -20 ~ 60
+   - 소수 휠: 0 ~ 9
+   - itemHeight: 40px
+============================================================ */
+const WHEEL = {
+  itemHeight: 40,
+  visibleCount: 4, // 위아래 패딩용
+};
+
+// 정수 리스트 빌드
+function buildWheelList(listId, items){
+  const list = document.getElementById(listId);
+  // 위아래 패딩 (선택 라인이 중앙에 오도록): 60px = 1.5 itemHeight
+  // 즉 itemHeight 60 위에서부터 첫 아이템 표시
+  // 위 60px = 선택라인-아이템높이/2 = 60-20=... 사실 첫아이템 중심 y=20, 선택라인 중심 y=80
+  // 그래서 첫 아이템 위에 60px 패딩
+  list.innerHTML =
+    `<div style="height:60px"></div>` +
+    items.map((v,i) => `<div class="wheel-item" data-idx="${i}" data-val="${v}">${v}</div>`).join('') +
+    `<div style="height:60px"></div>`;
+}
+
+// 정수: -20 ~ 60
+const INT_VALUES = [];
+for(let v = state.range.min; v <= state.range.max; v++) INT_VALUES.push(v);
+// 소수: 0 ~ 9
+const DEC_VALUES = [0,1,2,3,4,5,6,7,8,9];
+
+buildWheelList('dryWheelIntList', INT_VALUES);
+buildWheelList('dryWheelDecList', DEC_VALUES);
+buildWheelList('wetWheelIntList', INT_VALUES);
+buildWheelList('wetWheelDecList', DEC_VALUES);
+
+// 휠 인덱스 동기화 (값 → translateY)
+function setWheel(listEl, idx, animate=true){
+  if(!animate) listEl.classList.add('no-anim');
+  listEl.style.transform = `translateY(${-idx * WHEEL.itemHeight}px)`;
+  // 선택된 행 강조
+  listEl.querySelectorAll('.wheel-item').forEach((el,i) => {
+    el.classList.toggle('selected', i === idx);
+  });
+  listEl.setAttribute('data-active','');
+  if(!animate) {
+    // 한 프레임 후 transition 복원
+    requestAnimationFrame(() => listEl.classList.remove('no-anim'));
+  }
+}
+
+// 값 → 휠 인덱스
+function valueToWheelIdx(value){
+  // value 예: 25.3 → 정수부 25, 소수부 3
+  // 음수 처리: -1.5 → 정수부 -1, 소수부 5? 아니면 -2 + 0.5?
+  // 사용자 입력 직관: -1.5는 "-1 소수0.5"가 아니라 "-2와 -1 사이의 -1.5"가 자연
+  // → 음수일 때: 정수부 = Math.ceil(v), 소수부 = (intP - value) * 10
+  //   예: -1.5 → intP=-1, decP = (-1 - (-1.5))*10 = 5 ✓
+  //   예: -20.0 → intP=-20, decP=0 ✓
+  //   예: 25.3 → intP=25, decP=3 ✓
+  let intP, decP;
+  if(value >= 0){
+    intP = Math.floor(value);
+    decP = Math.round((value - intP) * 10);
+  } else {
+    intP = Math.ceil(value);
+    decP = Math.round((intP - value) * 10);
+  }
+  // 소수가 10이 되면 정수부 올림
+  if(decP >= 10){
+    if(value >= 0) intP += 1; else intP -= 1;
+    decP = 0;
+  }
+  intP = Math.max(state.range.min, Math.min(state.range.max, intP));
+  return {
+    intIdx: INT_VALUES.indexOf(intP),
+    decIdx: decP
+  };
+}
+
+// 휠 인덱스 → 값
+function wheelToValue(intIdx, decIdx){
+  const intP = INT_VALUES[intIdx];
+  const dec = decIdx / 10;
+  // 음수 정수부 + 소수부 결합: intP=-1, decP=5 → -1.5
+  return intP >= 0 ? intP + dec : intP - dec;
+}
+
+// 휠 드래그 처리
+function attachWheel(wheelEl){
+  const which = wheelEl.dataset.which;
+  const part = wheelEl.dataset.part; // 'int' | 'dec'
+  const listId = `${which}Wheel${part === 'int' ? 'Int' : 'Dec'}List`;
+  const list = document.getElementById(listId);
+  const maxIdx = (part === 'int' ? INT_VALUES.length : DEC_VALUES.length) - 1;
+
+  let dragging = false;
+  let startY = 0;
+  let startTransform = 0;
+  let currentTransform = 0;
+  let velocity = 0;
+  let lastMoveY = 0;
+  let lastMoveTime = 0;
+
+  function getCurrentTransform(){
+    const m = list.style.transform.match(/-?\d+\.?\d*/);
+    return m ? parseFloat(m[0]) : 0;
+  }
+
+  function onDown(e){
+    dragging = true;
+    list.classList.add('no-anim');
+    const y = e.touches ? e.touches[0].clientY : e.clientY;
+    startY = y;
+    lastMoveY = y;
+    lastMoveTime = Date.now();
+    startTransform = getCurrentTransform();
+    velocity = 0;
+    e.preventDefault();
+  }
+
+  function onMove(e){
+    if(!dragging) return;
+    e.preventDefault();
+    const y = e.touches ? e.touches[0].clientY : e.clientY;
+    const dy = y - startY;
+    let newT = startTransform + dy;
+    // bounds (탄성 효과 없이 단순 클램프)
+    const minT = -maxIdx * WHEEL.itemHeight;
+    const maxT = 0;
+    if(newT > maxT) newT = maxT;
+    if(newT < minT) newT = minT;
+    list.style.transform = `translateY(${newT}px)`;
+    currentTransform = newT;
+    // velocity 계산
+    const now = Date.now();
+    const dt = now - lastMoveTime;
+    if(dt > 0) velocity = (y - lastMoveY) / dt;
+    lastMoveY = y;
+    lastMoveTime = now;
+  }
+
+  function onUp(){
+    if(!dragging) return;
+    dragging = false;
+    list.classList.remove('no-anim');
+    // 관성 + 스냅
+    // 속도(px/ms) * 200ms 정도 더 굴림
+    let projected = currentTransform + velocity * 150;
+    const minT = -maxIdx * WHEEL.itemHeight;
+    const maxT = 0;
+    if(projected > maxT) projected = maxT;
+    if(projected < minT) projected = minT;
+    // 가장 가까운 인덱스로 스냅
+    let idx = Math.round(-projected / WHEEL.itemHeight);
+    idx = Math.max(0, Math.min(maxIdx, idx));
+    setWheel(list, idx, true);
+    // 값 반영
+    applyWheelChange(which);
+    // 햅틱
+    if(navigator.vibrate) navigator.vibrate(8);
+  }
+
+  wheelEl.addEventListener('mousedown', onDown);
+  wheelEl.addEventListener('touchstart', onDown, {passive:false});
+  window.addEventListener('mousemove', onMove);
+  window.addEventListener('touchmove', onMove, {passive:false});
+  window.addEventListener('mouseup', onUp);
+  window.addEventListener('touchend', onUp);
+}
+
+function getWheelIdx(listEl){
+  const t = getComputedStyle(listEl).transform;
+  // matrix(a, b, c, d, tx, ty)
+  const m = t.match(/matrix.*\((.+)\)/);
+  if(!m) return 0;
+  const parts = m[1].split(',').map(s => parseFloat(s));
+  const ty = parts[5] != null ? parts[5] : 0;
+  return Math.round(-ty / WHEEL.itemHeight);
+}
+
+function applyWheelChange(which){
+  const intList = document.getElementById(`${which}WheelIntList`);
+  const decList = document.getElementById(`${which}WheelDecList`);
+  const intIdx = getWheelIdx(intList);
+  const decIdx = getWheelIdx(decList);
+  const v = wheelToValue(intIdx, decIdx);
+  applyValue(which, v, /*fromWheel=*/true);
+}
+
+['dryWheelInt','dryWheelDec','wetWheelInt','wetWheelDec'].forEach(id => {
+  attachWheel(document.getElementById(id));
+});
+
+function syncWheelsFromState(){
+  const dryIdx = valueToWheelIdx(state.dryT);
+  const wetIdx = valueToWheelIdx(state.wetT);
+  setWheel(document.getElementById('dryWheelIntList'), dryIdx.intIdx, true);
+  setWheel(document.getElementById('dryWheelDecList'), dryIdx.decIdx, true);
+  setWheel(document.getElementById('wetWheelIntList'), wetIdx.intIdx, true);
+  setWheel(document.getElementById('wetWheelDecList'), wetIdx.decIdx, true);
+}
+
+/* ============================================================
+   렌더 (전체 동기화)
+============================================================ */
+function render(skipWheels){
+  const { rh, dp } = calc(state.dryT, state.wetT);
+  document.getElementById('rhVal').textContent = rh.toFixed(1);
+  document.getElementById('dpVal').textContent = dp.toFixed(1);
+  document.getElementById('rhBadge').textContent = rhBadge(rh);
+  document.getElementById('dpBadge').textContent = dpBadge(dp);
+  document.getElementById('rhBar').style.width = `${rh}%`;
+  const dpPct = Math.max(0, Math.min(100, ((dp + 20) / 60) * 100));
+  document.getElementById('dpBar').style.width = `${dpPct}%`;
+  // 다이얼
+  document.getElementById('dryValDial').textContent = state.dryT.toFixed(1);
+  document.getElementById('wetValDial').textContent = state.wetT.toFixed(1);
+  updateGauge('dry', state.dryT);
+  updateGauge('wet', state.wetT);
+  // 온도계
+  document.getElementById('dryValThermo').textContent = state.dryT.toFixed(1);
+  document.getElementById('wetValThermo').textContent = state.wetT.toFixed(1);
+  updateThermo('dry', state.dryT);
+  updateThermo('wet', state.wetT);
+  // 휠
+  if(!skipWheels) syncWheelsFromState();
+}
+
+/* 다이얼 */
+const G = { cx: 72, cy: 72, r: 58, circ: 2*Math.PI*58, arcLen: 2*Math.PI*58 * (270/360) };
+function valueToKnobXY(v){
+  const pct = Math.max(0, Math.min(1, valueToPct(v)));
+  const ang = 135 + pct * 270;
+  const rad = ang * Math.PI / 180;
+  return { x: G.cx + G.r * Math.cos(rad), y: G.cy + G.r * Math.sin(rad) };
+}
+function updateGauge(which, value){
+  const pct = Math.max(0, Math.min(1, valueToPct(value)));
+  document.getElementById(which+'Fill').setAttribute('stroke-dasharray', `${G.arcLen * pct} ${G.circ}`);
+  const {x,y} = valueToKnobXY(value);
+  const knob = document.getElementById(which+'Knob');
+  knob.setAttribute('cx', x.toFixed(2));
+  knob.setAttribute('cy', y.toFixed(2));
+}
+function attachGauge(elId, which){
+  const el = document.getElementById(elId);
+  let dragging = false;
+  function ptv(e){
+    const r = el.getBoundingClientRect();
+    const cx = e.touches ? e.touches[0].clientX : e.clientX;
+    const cy = e.touches ? e.touches[0].clientY : e.clientY;
+    const sx = ((cx-r.left)/r.width)*144, sy = ((cy-r.top)/r.height)*144;
+    let ang = Math.atan2(sy-G.cy, sx-G.cx) * 180/Math.PI;
+    if(ang<0) ang+=360;
+    let rel;
+    if(ang>=135 && ang<=360) rel = ang-135;
+    else if(ang>=0 && ang<=45) rel = ang+225;
+    else rel = (ang<90) ? 270 : 0;
+    return state.range.min + (rel/270)*(state.range.max-state.range.min);
+  }
+  function move(e){
+    if(!dragging) return;
+    e.preventDefault();
+    let v = ptv(e);
+    v = Math.max(state.range.min, Math.min(state.range.max, Math.round(v*10)/10));
+    applyValue(which, v);
+  }
+  el.addEventListener('mousedown', e=>{dragging=true;move(e);});
+  el.addEventListener('touchstart', e=>{dragging=true;move(e);}, {passive:false});
+  window.addEventListener('mousemove', move);
+  window.addEventListener('touchmove', move, {passive:false});
+  window.addEventListener('mouseup', ()=>dragging=false);
+  window.addEventListener('touchend', ()=>dragging=false);
+}
+attachGauge('dryGauge','dry');
+attachGauge('wetGauge','wet');
+
+/* 온도계 */
+const THERMO = { yMax:9, yMin:173, height:164 };
+function updateThermo(which, value){
+  const pct = Math.max(0, Math.min(1, valueToPct(value)));
+  const h = THERMO.height * pct;
+  const y = THERMO.yMin - h;
+  const el = document.getElementById(which+'ThermoFill');
+  el.setAttribute('y', y.toFixed(2));
+  el.setAttribute('height', h.toFixed(2));
+}
+function attachThermo(elId, which){
+  const el = document.getElementById(elId);
+  let dragging = false;
+  function ptv(e){
+    const r = el.getBoundingClientRect();
+    const cy = e.touches ? e.touches[0].clientY : e.clientY;
+    const sy = ((cy-r.top)/r.height)*200;
+    const pct = (THERMO.yMin - sy) / THERMO.height;
+    return state.range.min + Math.max(0,Math.min(1,pct))*(state.range.max-state.range.min);
+  }
+  function move(e){
+    if(!dragging) return;
+    e.preventDefault();
+    let v = ptv(e);
+    v = Math.max(state.range.min, Math.min(state.range.max, Math.round(v*10)/10));
+    applyValue(which, v);
+  }
+  el.addEventListener('mousedown', e=>{dragging=true;move(e);});
+  el.addEventListener('touchstart', e=>{dragging=true;move(e);}, {passive:false});
+  window.addEventListener('mousemove', move);
+  window.addEventListener('touchmove', move, {passive:false});
+  window.addEventListener('mouseup', ()=>dragging=false);
+  window.addEventListener('touchend', ()=>dragging=false);
+}
+attachThermo('dryThermo','dry');
+attachThermo('wetThermo','wet');
+
+/* 공통 값 적용 */
+function applyValue(which, v, fromWheel){
+  v = Math.max(state.range.min, Math.min(state.range.max, Math.round(v*10)/10));
+  if(which === 'dry'){
+    state.dryT = v;
+    if(state.wetT > state.dryT) state.wetT = state.dryT;
+  } else {
+    state.wetT = Math.min(v, state.dryT);
+  }
+  // 휠에서 입력 중일 땐 휠 재동기화는 스킵 (사용자 손가락 위에서 충돌 방지)
+  // 단, dry 변경으로 wet가 강제 보정된 경우 wet 휠은 동기화 필요
+  render(fromWheel && which === state.lastWheel);
+  state.lastWheel = which;
+  // 휠인 경우 wet의 강제 보정만 동기화
+  if(fromWheel && which === 'dry' && state.wetT < v){
+    // 별일 없음
+  } else if(fromWheel && which === 'dry'){
+    const wIdx = valueToWheelIdx(state.wetT);
+    setWheel(document.getElementById('wetWheelIntList'), wIdx.intIdx, true);
+    setWheel(document.getElementById('wetWheelDecList'), wIdx.decIdx, true);
+  }
+}
+
+/* 입력 토글 */
+document.querySelectorAll('.input-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    const mode = tab.dataset.mode;
+    state.inputMode = mode;
+    document.querySelectorAll('.input-tab').forEach(t => t.classList.toggle('active', t.dataset.mode === mode));
+    document.getElementById('modeDial').classList.toggle('hidden', mode !== 'dial');
+    document.getElementById('modeThermo').classList.toggle('hidden', mode !== 'thermo');
+    document.getElementById('modeWheel').classList.toggle('hidden', mode !== 'wheel');
+    if(mode === 'wheel'){
+      // 휠 모드 진입 시 강제 재동기화 (mask로 인한 초기 렌더 이슈 방지)
+      requestAnimationFrame(syncWheelsFromState);
+    }
+  });
+});
+
+/* Open-Meteo */
+const weatherIcons = {
+  0:['sunny','맑음'], 1:['partly_cloudy_day','대체로 맑음'], 2:['partly_cloudy_day','부분적 흐림'], 3:['cloud','흐림'],
+  45:['foggy','안개'], 48:['foggy','짙은 안개'],
+  51:['rainy_light','이슬비'], 53:['rainy_light','이슬비'], 55:['rainy_light','이슬비'],
+  61:['rainy','약한 비'], 63:['rainy','비'], 65:['rainy_heavy','강한 비'],
+  71:['weather_snowy','약한 눈'], 73:['weather_snowy','눈'], 75:['weather_snowy','강한 눈'],
+  77:['weather_snowy','싸락눈'],
+  80:['rainy','소나기'], 81:['rainy','소나기'], 82:['rainy_heavy','강한 소나기'],
+  85:['weather_snowy','눈 소나기'], 86:['weather_snowy','강한 눈 소나기'],
+  95:['thunderstorm','뇌우'], 96:['thunderstorm','뇌우+우박'], 99:['thunderstorm','강한 뇌우']
+};
+async function fetchWeather(lat, lon){
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,surface_pressure&timezone=auto`;
+  const r = await fetch(url);
+  if(!r.ok) throw new Error('API 오류');
+  return r.json();
+}
+async function reverseGeocode(lat, lon){
+  try{
+    const r = await fetch(`https://geocoding-api.open-meteo.com/v1/reverse?latitude=${lat}&longitude=${lon}&language=ko&count=1`);
+    if(!r.ok) return null;
+    const j = await r.json();
+    if(j.results && j.results[0]){
+      const x = j.results[0];
+      return x.admin1 || x.name || x.country || null;
+    }
+  }catch(e){}
+  return null;
+}
+async function loadCurrent(){
+  const btn = document.getElementById('refreshBtn');
+  btn.classList.add('spinning');
+  document.getElementById('loc').textContent = '위치 확인 중…';
+  try{
+    if(!navigator.geolocation) throw new Error('GPS 미지원');
+    const pos = await new Promise((res, rej) => {
+      navigator.geolocation.getCurrentPosition(res, rej, {timeout:10000, enableHighAccuracy:false});
+    });
+    const {latitude:lat, longitude:lon} = pos.coords;
+    const [data, locName] = await Promise.all([
+      fetchWeather(lat, lon),
+      reverseGeocode(lat, lon)
+    ]);
+    const c = data.current;
+    if(c.surface_pressure != null) state.pressure = c.surface_pressure;
+    state.current = {
+      temp: c.temperature_2m, humidity: c.relative_humidity_2m,
+      apparent: c.apparent_temperature, code: c.weather_code,
+      wind: c.wind_speed_10m, pressure: c.surface_pressure
+    };
+    document.getElementById('loc').textContent = locName || `${lat.toFixed(2)}, ${lon.toFixed(2)}`;
+    document.getElementById('temp').textContent = c.temperature_2m.toFixed(1);
+    document.getElementById('feel').textContent = c.apparent_temperature.toFixed(1);
+    const [icon, desc] = weatherIcons[c.weather_code] || ['cloud','—'];
+    document.getElementById('wIcon').textContent = icon;
+    document.getElementById('wDesc').textContent = desc;
+    document.getElementById('mHum').textContent = `${c.relative_humidity_2m}%`;
+    document.getElementById('mWind').textContent = c.wind_speed_10m.toFixed(0);
+    render();
+  }catch(e){
+    document.getElementById('loc').textContent = '위치를 가져올 수 없어요';
+    console.error(e);
+  }finally{
+    btn.classList.remove('spinning');
+  }
+}
+
+/* 액션 */
+function rhDryToWet(dry, rh){
+  let lo = -50, hi = dry;
+  for(let i=0;i<40;i++){
+    const mid = (lo + hi) / 2;
+    if(calc(dry, mid).rh < rh) lo = mid; else hi = mid;
+  }
+  return (lo + hi) / 2;
+}
+document.getElementById('useCurrentBtn').addEventListener('click', () => {
+  if(!state.current){ showToast('현재 날씨를 먼저 불러오세요'); return; }
+  state.dryT = Math.round(state.current.temp * 10) / 10;
+  const wet = rhDryToWet(state.dryT, state.current.humidity);
+  state.wetT = Math.max(state.range.min, Math.min(state.dryT, Math.round(wet*10)/10));
+  render();
+  showToast('현재값 적용됨');
+});
+document.getElementById('resetBtn').addEventListener('click', () => {
+  state.dryT = 25.0; state.wetT = 20.0; render();
+  showToast('초기화됨');
+});
+document.getElementById('copyBtn').addEventListener('click', async () => {
+  const { rh, dp } = calc(state.dryT, state.wetT);
+  const text = `[이슬점 계산]
+건구: ${state.dryT.toFixed(1)}°C / 습구: ${state.wetT.toFixed(1)}°C
+상대습도: ${rh.toFixed(1)}% / 이슬점: ${dp.toFixed(1)}°C
+(대기압 ${state.pressure.toFixed(1)} hPa 기준)`;
+  try{ await navigator.clipboard.writeText(text); showToast('복사됨'); }
+  catch(e){ showToast('복사 실패'); }
+});
+document.getElementById('refreshBtn').addEventListener('click', loadCurrent);
+document.getElementById('shareBtn').addEventListener('click', async () => {
+  const { rh, dp } = calc(state.dryT, state.wetT);
+  const text = `건구 ${state.dryT.toFixed(1)}°C / 습구 ${state.wetT.toFixed(1)}°C
+상대습도 ${rh.toFixed(1)}% · 이슬점 ${dp.toFixed(1)}°C`;
+  if(navigator.share){
+    try{ await navigator.share({title:'Atmosphere Monitor', text}); }catch(e){}
+  } else {
+    try{ await navigator.clipboard.writeText(text); showToast('공유 텍스트 복사됨'); }catch(e){}
+  }
+});
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(showToast._t);
+  showToast._t = setTimeout(() => t.classList.remove('show'), 1600);
+}
+
+render();
+loadCurrent();
+</script>
+</body>
+</html>
