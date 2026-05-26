@@ -834,13 +834,26 @@ async function fetchWeather(lat, lon){
   return r.json();
 }
 async function reverseGeocode(lat, lon){
+  // 1) Open-Meteo 우선 시도
   try{
     const r = await fetch(`https://geocoding-api.open-meteo.com/v1/reverse?latitude=${lat}&longitude=${lon}&language=ko&count=1`);
-    if(!r.ok) return null;
-    const j = await r.json();
-    if(j.results && j.results[0]){
-      const x = j.results[0];
-      return x.admin1 || x.name || x.country || null;
+    if(r.ok){
+      const j = await r.json();
+      if(j.results && j.results[0]){
+        const x = j.results[0];
+        const parts = [x.admin1, x.admin2].filter(Boolean);
+        if(parts.length) return parts.join(' ');
+        if(x.name) return x.name;
+      }
+    }
+  }catch(e){}
+  // 2) BigDataCloud 폴백 (한국어 행정구역, 무료/키불필요)
+  try{
+    const r = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=ko`);
+    if(r.ok){
+      const j = await r.json();
+      const parts = [j.principalSubdivision, j.city || j.locality].filter(Boolean);
+      if(parts.length) return [...new Set(parts)].join(' ');
     }
   }catch(e){}
   return null;
@@ -866,7 +879,7 @@ async function loadCurrent(){
       apparent: c.apparent_temperature, code: c.weather_code,
       wind: c.wind_speed_10m, pressure: c.surface_pressure
     };
-    document.getElementById('loc').textContent = locName || `${lat.toFixed(2)}, ${lon.toFixed(2)}`;
+    document.getElementById('loc').textContent = locName || '위치 확인 불가';
     document.getElementById('temp').textContent = c.temperature_2m.toFixed(1);
     document.getElementById('feel').textContent = c.apparent_temperature.toFixed(1);
     const [icon, desc] = weatherIcons[c.weather_code] || ['cloud','—'];
