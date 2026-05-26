@@ -826,8 +826,13 @@ const weatherIcons = {
 };
 async function fetchWeather(lat, lon){
   const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,surface_pressure&timezone=auto`;
-  const r = await fetch(url);
-  if(!r.ok) throw new Error('API 오류');
+  let r;
+  try{
+    r = await fetch(url);
+  }catch(e){
+    throw new Error(`네트워크 차단: ${e.message}`);
+  }
+  if(!r.ok) throw new Error(`HTTP ${r.status}`);
   return r.json();
 }
 async function reverseGeocode(lat, lon){
@@ -923,7 +928,12 @@ async function loadCurrent(){
       ]);
     }catch(apiErr){
       console.error('API error:', apiErr);
-      locEl.textContent = `${lat.toFixed(3)}, ${lon.toFixed(3)} (API 오류)`;
+      // file:// 프로토콜은 CORS로 차단됨
+      const isFile = location.protocol === 'file:';
+      const msg = isFile
+        ? '로컬 file:// 차단 (서버로 실행 필요)'
+        : (apiErr.message || 'API 오류');
+      locEl.textContent = `${lat.toFixed(3)}, ${lon.toFixed(3)} · ${msg}`;
       btn.classList.remove('spinning');
       return;
     }
