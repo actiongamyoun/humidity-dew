@@ -825,37 +825,29 @@ const weatherIcons = {
   95:['thunderstorm','뇌우'], 96:['thunderstorm','뇌우+우박'], 99:['thunderstorm','강한 뇌우']
 };
 async function fetchWeather(lat, lon){
-  // 메인: Open-Meteo (surface_pressure 빼고 핵심만, 일부 환경에서 surface_pressure가 응답 차단 유발)
-  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m&timezone=auto`;
+  // Vercel 서버리스 함수 프록시 경유
+  // /api/weather.js → Open-Meteo 호출 → 결과 반환
+  // 같은 도메인이라 CORS 무관, Vercel IP가 막혀도 5분 캐시로 안정성↑
+  const url = `/api/weather?lat=${lat}&lon=${lon}`;
   try{
     const r = await fetch(url);
-    if(r.ok) return r.json();
-    console.warn('[weather] Open-Meteo HTTP', r.status);
-  }catch(e){
-    console.warn('[weather] Open-Meteo 실패:', e.message);
-  }
-  // 백업: Open-Meteo 미러 (다른 서브도메인, 같은 데이터)
-  try{
-    const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&hourly=relative_humidity_2m,apparent_temperature&timezone=auto`);
-    if(r.ok){
-      const j = await r.json();
-      // current_weather 포맷을 current 포맷처럼 변환
-      const cw = j.current_weather;
-      const idx = (j.hourly && j.hourly.time) ? j.hourly.time.indexOf(cw.time) : -1;
-      return {
-        current: {
-          temperature_2m: cw.temperature,
-          weather_code: cw.weathercode,
-          wind_speed_10m: cw.windspeed,
-          relative_humidity_2m: idx >= 0 ? j.hourly.relative_humidity_2m[idx] : null,
-          apparent_temperature: idx >= 0 ? j.hourly.apparent_temperature[idx] : cw.temperature
-        }
-      };
+    if(!r.ok){
+      const errBody = await r.json().catch(() => ({}));
+      throw new Error(errBody.error || `HTTP ${r.status}`);
     }
+    return r.json();
   }catch(e){
-    console.warn('[weather] Open-Meteo 백업 실패:', e.message);
+    console.warn('[weather] 프록시 실패:', e.message);
+    // 폴백: 직접 Open-Meteo 호출 (Netlify 등 다른 호스팅 환경 대응)
+    try{
+      const direct = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,surface_pressure&timezone=auto`;
+      const r2 = await fetch(direct);
+      if(r2.ok) return r2.json();
+    }catch(e2){
+      console.warn('[weather] 직접 호출도 실패:', e2.message);
+    }
+    throw new Error('날씨 데이터 가져오기 실패');
   }
-  throw new Error('날씨 데이터 가져오기 실패');
 }
 async function reverseGeocode(lat, lon){
   // 한국 행정구역: 시/도 + 시/군/구 단위까지 추출
