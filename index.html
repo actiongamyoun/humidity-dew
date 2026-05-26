@@ -257,7 +257,7 @@ tailwind.config = {
       <div class="grid grid-cols-2 gap-4">
         <div class="flex flex-col items-center">
           <span class="text-[12px] text-on-surface-variant mb-3 font-semibold">건구온도</span>
-          <div class="gauge-wrap relative flex items-center justify-center w-32 h-32" id="dryGauge">
+          <div class="gauge-wrap relative flex items-center justify-center w-40 h-40" id="dryGauge">
             <svg class="w-full h-full" viewBox="0 0 144 144">
               <g transform="rotate(135 72 72)">
                 <circle cx="72" cy="72" r="58" fill="transparent" stroke="#ededf2" stroke-width="10" stroke-linecap="round" stroke-dasharray="273.32 364.42"/>
@@ -266,15 +266,15 @@ tailwind.config = {
               <circle id="dryKnob" class="gauge-knob" cx="72" cy="72" r="8" fill="#fff" stroke="#ba1a1a" stroke-width="3"/>
             </svg>
             <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-              <span id="dryValDial" class="font-bold text-[20px]">25.0</span>
-              <span class="text-error font-semibold text-[10px]">°C</span>
+              <span id="dryValDial" class="font-bold text-[26px]">25.0</span>
+              <span class="text-error font-semibold text-[11px]">°C</span>
             </div>
-            <div class="absolute -bottom-1 text-[9px] text-outline flex justify-between w-[80%] pointer-events-none"><span>-20</span><span>60</span></div>
+            <div class="absolute -bottom-1 text-[10px] text-outline flex justify-between w-[80%] pointer-events-none"><span>-20</span><span>60</span></div>
           </div>
         </div>
         <div class="flex flex-col items-center">
           <span class="text-[12px] text-on-surface-variant mb-3 font-semibold">습구온도</span>
-          <div class="gauge-wrap relative flex items-center justify-center w-32 h-32" id="wetGauge">
+          <div class="gauge-wrap relative flex items-center justify-center w-40 h-40" id="wetGauge">
             <svg class="w-full h-full" viewBox="0 0 144 144">
               <g transform="rotate(135 72 72)">
                 <circle cx="72" cy="72" r="58" fill="transparent" stroke="#ededf2" stroke-width="10" stroke-linecap="round" stroke-dasharray="273.32 364.42"/>
@@ -283,10 +283,10 @@ tailwind.config = {
               <circle id="wetKnob" class="gauge-knob" cx="72" cy="72" r="8" fill="#fff" stroke="#0070eb" stroke-width="3"/>
             </svg>
             <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-              <span id="wetValDial" class="font-bold text-[20px]">20.0</span>
-              <span class="text-primary font-semibold text-[10px]">°C</span>
+              <span id="wetValDial" class="font-bold text-[26px]">20.0</span>
+              <span class="text-primary font-semibold text-[11px]">°C</span>
             </div>
-            <div class="absolute -bottom-1 text-[9px] text-outline flex justify-between w-[80%] pointer-events-none"><span>-20</span><span>60</span></div>
+            <div class="absolute -bottom-1 text-[10px] text-outline flex justify-between w-[80%] pointer-events-none"><span>-20</span><span>60</span></div>
           </div>
         </div>
       </div>
@@ -393,9 +393,6 @@ tailwind.config = {
       </button>
       <button id="resetBtn" class="flex items-center gap-1 px-3 py-2 rounded-full bg-surface-container hover:bg-surface-container-high text-on-surface-variant active:scale-95">
         <span class="material-symbols-outlined text-[16px]">refresh</span><span class="text-[12px] font-semibold">초기화</span>
-      </button>
-      <button id="copyBtn" class="flex items-center gap-1 px-3 py-2 rounded-full bg-surface-container hover:bg-surface-container-high text-on-surface-variant active:scale-95">
-        <span class="material-symbols-outlined text-[16px]">content_copy</span><span class="text-[12px] font-semibold">복사</span>
       </button>
     </div>
   </section>
@@ -834,7 +831,46 @@ async function fetchWeather(lat, lon){
   return r.json();
 }
 async function reverseGeocode(lat, lon){
-  // 1) Open-Meteo 우선 시도
+  // 한국 행정구역: 시/도 + 시/군/구 단위까지 추출
+  // 우선순위: BigDataCloud (administrative 배열이 한국 행정구역에 강함) → Open-Meteo 폴백
+
+  // 1) BigDataCloud
+  try{
+    const r = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=ko`);
+    if(r.ok){
+      const j = await r.json();
+      // localityInfo.administrative: 가장 큰 단위부터 [국가, 시/도, 시/군/구, 읍/면/동...] 순
+      // adminLevel 기준: 2(국가), 4(시·도), 6(시), 7(구), 8(읍·면·동) 등 OSM 기준
+      const admins = (j.localityInfo && j.localityInfo.administrative) || [];
+      // 한국 기준: '특별시/광역시/도'와 '구/시/군' 둘 다 찾기
+      let sido = null;   // 시/도
+      let sigungu = null; // 시/군/구
+
+      for(const a of admins){
+        const name = (a.name || '').trim();
+        if(!name) continue;
+        // 시/도 후보
+        if(!sido && /(특별시|광역시|특별자치시|특별자치도|도)$/.test(name)){
+          sido = name;
+        }
+        // 시/군/구 후보
+        else if(!sigungu && /(시|군|구)$/.test(name)){
+          // sido에 이미 잡힌 이름과 중복 방지
+          if(name !== sido) sigungu = name;
+        }
+      }
+      // 폴백 처리
+      if(!sido) sido = j.principalSubdivision || null;
+      if(!sigungu) sigungu = j.city || j.locality || null;
+
+      const parts = [sido, sigungu].filter(Boolean);
+      // 중복 제거 (예: 세종특별자치시 == city도 세종)
+      const uniq = [...new Set(parts)];
+      if(uniq.length) return uniq.join(' ');
+    }
+  }catch(e){}
+
+  // 2) Open-Meteo 폴백
   try{
     const r = await fetch(`https://geocoding-api.open-meteo.com/v1/reverse?latitude=${lat}&longitude=${lon}&language=ko&count=1`);
     if(r.ok){
@@ -842,20 +878,13 @@ async function reverseGeocode(lat, lon){
       if(j.results && j.results[0]){
         const x = j.results[0];
         const parts = [x.admin1, x.admin2].filter(Boolean);
-        if(parts.length) return parts.join(' ');
+        const uniq = [...new Set(parts)];
+        if(uniq.length) return uniq.join(' ');
         if(x.name) return x.name;
       }
     }
   }catch(e){}
-  // 2) BigDataCloud 폴백 (한국어 행정구역, 무료/키불필요)
-  try{
-    const r = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=ko`);
-    if(r.ok){
-      const j = await r.json();
-      const parts = [j.principalSubdivision, j.city || j.locality].filter(Boolean);
-      if(parts.length) return [...new Set(parts)].join(' ');
-    }
-  }catch(e){}
+
   return null;
 }
 async function loadCurrent(){
@@ -916,15 +945,6 @@ document.getElementById('useCurrentBtn').addEventListener('click', () => {
 document.getElementById('resetBtn').addEventListener('click', () => {
   state.dryT = 25.0; state.wetT = 20.0; render();
   showToast('초기화됨');
-});
-document.getElementById('copyBtn').addEventListener('click', async () => {
-  const { rh, dp } = calc(state.dryT, state.wetT);
-  const text = `[이슬점 계산]
-건구: ${state.dryT.toFixed(1)}°C / 습구: ${state.wetT.toFixed(1)}°C
-상대습도: ${rh.toFixed(1)}% / 이슬점: ${dp.toFixed(1)}°C
-(대기압 ${state.pressure.toFixed(1)} hPa 기준)`;
-  try{ await navigator.clipboard.writeText(text); showToast('복사됨'); }
-  catch(e){ showToast('복사 실패'); }
 });
 document.getElementById('refreshBtn').addEventListener('click', loadCurrent);
 document.getElementById('shareBtn').addEventListener('click', async () => {
