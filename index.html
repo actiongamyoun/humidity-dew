@@ -825,31 +825,63 @@ const weatherIcons = {
   95:['thunderstorm','뇌우'], 96:['thunderstorm','뇌우+우박'], 99:['thunderstorm','강한 뇌우']
 };
 async function fetchWeather(lat, lon){
-  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,surface_pressure&timezone=auto`;
-  const r = await fetch(url);
-  if(!r.ok) throw new Error('API 오류');
-  return r.json();
+  // 메인: Open-Meteo (surface_pressure 빼고 핵심만, 일부 환경에서 surface_pressure가 응답 차단 유발)
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m&timezone=auto`;
+  try{
+    const r = await fetch(url);
+    if(r.ok) return r.json();
+    console.warn('[weather] Open-Meteo HTTP', r.status);
+  }catch(e){
+    console.warn('[weather] Open-Meteo 실패:', e.message);
+  }
+  // 백업: Open-Meteo 미러 (다른 서브도메인, 같은 데이터)
+  try{
+    const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&hourly=relative_humidity_2m,apparent_temperature&timezone=auto`);
+    if(r.ok){
+      const j = await r.json();
+      // current_weather 포맷을 current 포맷처럼 변환
+      const cw = j.current_weather;
+      const idx = (j.hourly && j.hourly.time) ? j.hourly.time.indexOf(cw.time) : -1;
+      return {
+        current: {
+          temperature_2m: cw.temperature,
+          weather_code: cw.weathercode,
+          wind_speed_10m: cw.windspeed,
+          relative_humidity_2m: idx >= 0 ? j.hourly.relative_humidity_2m[idx] : null,
+          apparent_temperature: idx >= 0 ? j.hourly.apparent_temperature[idx] : cw.temperature
+        }
+      };
+    }
+  }catch(e){
+    console.warn('[weather] Open-Meteo 백업 실패:', e.message);
+  }
+  throw new Error('날씨 데이터 가져오기 실패');
 }
 async function reverseGeocode(lat, lon){
   // 한국 행정구역: 시/도 + 시/군/구 단위까지 추출
   // 3개 API 순차 시도 (네트워크/CORS 환경에 따라 하나라도 성공하면 OK)
 
   // ─── 1) Nominatim (OpenStreetMap) ─── 한국 행정구역 데이터 가장 충실
+  // zoom=12: 시/군/구 단위까지 (10은 광역시만, 14는 동까지)
   try{
     const r = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&accept-language=ko&zoom=10`,
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&accept-language=ko&zoom=12&addressdetails=1`,
       { headers: { 'Accept': 'application/json' } }
     );
     if(r.ok){
       const j = await r.json();
       const a = j.address || {};
-      // 한국 응답 예시: { state: '울산광역시', city: '동구', borough/county/... }
+      // 한국 응답 예시:
+      //   { state: '부산광역시', city: '해운대구', ... } 또는
+      //   { state: '경기도', city: '성남시', borough: '분당구', ... }
       const sido = a.state || a.province || a.region;
-      const sigungu = a.city || a.county || a.borough || a.town || a.municipality;
+      // city/borough/county 중 시·군·구로 보이는 첫 번째
+      const sigunguCandidates = [a.city, a.borough, a.county, a.town, a.municipality, a.city_district, a.suburb].filter(Boolean);
+      const sigungu = sigunguCandidates.find(n => /(시|군|구)$/.test(n)) || sigunguCandidates[0];
       const parts = [sido, sigungu].filter(Boolean);
       const uniq = [...new Set(parts)];
       if(uniq.length){
-        console.log('[geocoding] Nominatim 성공:', uniq.join(' '));
+        console.log('[geocoding] Nominatim 성공:', uniq.join(' '), 'raw:', a);
         return uniq.join(' ');
       }
     } else {
@@ -937,13 +969,13 @@ async function loadCurrent(){
       wind: c.wind_speed_10m, pressure: c.surface_pressure
     };
     document.getElementById('loc').textContent = locName || '위치 확인 불가';
-    document.getElementById('temp').textContent = c.temperature_2m.toFixed(1);
-    document.getElementById('feel').textContent = c.apparent_temperature.toFixed(1);
+    document.getElementById('temp').textContent = c.temperature_2m != null ? c.temperature_2m.toFixed(1) : '--';
+    document.getElementById('feel').textContent = c.apparent_temperature != null ? c.apparent_temperature.toFixed(1) : '--';
     const [icon, desc] = weatherIcons[c.weather_code] || ['cloud','—'];
     document.getElementById('wIcon').textContent = icon;
     document.getElementById('wDesc').textContent = desc;
-    document.getElementById('mHum').textContent = `${c.relative_humidity_2m}%`;
-    document.getElementById('mWind').textContent = c.wind_speed_10m.toFixed(0);
+    document.getElementById('mHum').textContent = c.relative_humidity_2m != null ? `${c.relative_humidity_2m}%` : '--%';
+    document.getElementById('mWind').textContent = c.wind_speed_10m != null ? c.wind_speed_10m.toFixed(0) : '--';
     render();
   }catch(e){
     document.getElementById('loc').textContent = '위치를 가져올 수 없어요';
